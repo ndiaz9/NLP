@@ -2,3 +2,5 @@
 .ipynb_checkpoints
 datos
 salida
+flagged
+__pycache__
