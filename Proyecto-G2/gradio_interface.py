@@ -1,7 +1,11 @@
+import pickle, gensim, re
 import gradio as gr
-import pickle
+import pandas as pd
+import numpy as np
 from gradio.components import Dropdown, Textbox
 from sklearn.preprocessing import Normalizer
+from keras.models import load_model
+from gensim.models import KeyedVectors
 from nltk.stem import WordNetLemmatizer
 from nltk.corpus import wordnet as wn
 from nltk.corpus import sentiwordnet as swn
@@ -11,7 +15,7 @@ download('wordnet')
 download('sentiwordnet')
 download('omw-1.4')
 download('averaged_perceptron_tagger')
-
+glove_embedding = KeyedVectors.load_word2vec_format('./datos/glove.6B.100d.txt.word2vec', binary=False)
 lemmatizer = WordNetLemmatizer()
 
 def penn_to_wn(tag):
@@ -63,6 +67,91 @@ def lexicon_sentiwordnet(document: str) -> list:
     ]
 
 
+def expand_contractions(document: str) -> str:
+    """
+    Replace all abbreviations with their corresponding expansion
+    """
+    document = re.sub(r"'cause", "because", document)
+    document = re.sub(r"o'clock", "of the clock", document)
+    document = re.sub(r"won\'t", "will not", document)
+    document = re.sub(r"can\'t", "can not", document)
+    document = re.sub(r"n\'t", " not", document)
+    document = re.sub(r"\'re", " are", document)
+    document = re.sub(r"\'s", " is", document)
+    document = re.sub(r"\'d", " would", document)
+    document = re.sub(r"\'ll", " will", document)
+    document = re.sub(r"\'t", " not", document)
+    document = re.sub(r"\'ve", " have", document)
+    document = re.sub(r"\'m", " am", document)
+    return document
+
+
+def replace_numbers(document: str) -> str:
+    """
+    Replace number appearances with 'number'
+    """
+    # Case 1: Combination of numbers and letters (Eg. 2nd -> NUM)
+    document = re.sub('[a-zA-Z]+[0-9]+[a-zA-Z]+', 'number', document)
+    document = re.sub('[0-9]+[a-zA-Z]+|[a-zA-Z]+[0-9]+', 'number', document)
+    # Case 2: Decimal numbers (Eg. 2.1 -> NUM)
+    document = re.sub('[0-9]+\.+[0-9]+', 'number', document)
+    # Case 3: Numbers between spaces (Eg. 220 888 -> NUM)
+    document = re.sub('([0-9]+\s)*[0-9]+', 'number', document)
+    # Case 4: One or more of the previous cases (Eg. NUM NUM -> NUM)
+    document = re.sub('((NUM)+\s)*(NUM)+', 'number', document)
+    return document
+
+
+def preprocessing(document: str) -> list:
+    """
+    iterate over all words in document identifing the word and frecuency
+    remove all the problematic characters over the word
+    and return a dictionary with the word as the key and the frecuency as the value
+    """
+    document = document.lower()
+    document = expand_contractions(document)
+    document = replace_numbers(document)
+    document = re.sub('[^A-Za-z0-9]+', ' ', document)
+    document = document.split()
+    return document
+
+
+def sentence_to_embedding(sentence: str, embedding: bin) -> np.array:
+    """
+    Returns the element-wise mean of the embeddings that represent each word in a sentence
+    """
+    words = preprocessing(sentence)
+    vector = np.zeros(embedding.layer1_size)
+    counter = 0
+    for word in words:
+        try:
+            vector += embedding.wv[word]
+            counter += 1
+        except:
+            pass
+    if counter > 0:
+        vector = vector / counter
+    return vector
+
+
+def glove_sentence_to_embedding(sentence: str, embedding: bin) -> np.array:
+    """
+    Returns the element-wise mean of the embeddings that represent each word in a sentence
+    """
+    words = preprocessing(sentence)
+    vector = np.zeros(embedding.vector_size)
+    counter = 0
+    for word in words:
+        try:
+            vector += embedding.get_vector(word)
+            counter += 1
+        except Exception as e:
+            pass
+    if counter > 0:
+        vector = vector / counter
+    return vector
+
+
 def predictor(model, text):
     if model == "Naive Bayes":
         count_vector = pickle.load(open('salida/naive_bayes.vector', 'rb'))
@@ -76,7 +165,7 @@ def predictor(model, text):
         data = count_vector.transform([text])
         norm = Normalizer().fit_transform(data)
         response = 'Hate Speech' if logistic_regression.predict(norm)[0] == 1 else 'Not Hate Speech'
-    elif model == "SentiWordNet Lexicon":
+    elif model == "Lexicon":
         naive_bayes = pickle.load(open('salida/swn_lexicon_naive_bayes.model', 'rb'))
         data = lexicon_sentiwordnet(text) if text else [0,0,0,0,0,0,0,0,0,0,0,0,0]
         response = 'Hate Speech' if naive_bayes.predict([data])[0] == 1 and text != '' else 'Not Hate Speech'
@@ -86,11 +175,26 @@ def predictor(model, text):
         data = count_vector.transform([text])
         norm = Normalizer().fit_transform(data)
         response = 'Hate Speech' if random_forest.predict(norm)[0] == 1 else 'Not Hate Speech'
+    elif model == "Trained Embedding":
+        embedding = gensim.models.Word2Vec.load('salida/embedding.model')
+        model = load_model('salida/embedding_model')
+        data = np.asarray([sentence_to_embedding(text, embedding).tolist()]).astype('float32')
+        pred = model.predict(data, verbose=1)
+        response = 'Hate Speech' if pred > 0.5 else 'Not Hate Speech'
+    elif model == "Glove Embedding":
+        glove_model = load_model('salida/embedding_glove')
+        emddng = np.asarray([glove_sentence_to_embedding(text, glove_embedding).tolist()]).astype('float32')
+        pred = glove_model.predict(emddng, verbose=1)
+        response = 'Hate Speech' if pred > 0.5 else 'Not Hate Speech'
+    elif model == "RNN":
+        response = "Modelo no disponible"
+    elif model == "Transformers":
+        response = "Modelo no disponible"
     else:
         response = "Modelo no disponible"
     return response
 
-input1 = Dropdown(["Naive Bayes", "Logistic Regression", "SentiWordNet Lexicon", "Random Forest", "Transformers"], label="Model")
+input1 = Dropdown(["Naive Bayes", "Logistic Regression", "Lexicon", "Random Forest", "Trained Embedding", "Glove Embedding", "RNN", "Transformers"], label="Model")
 input2 = Textbox(placeholder="Enter Phrase", label="Phrase")
 output = Textbox(label="Result")
 
