@@ -5,6 +5,8 @@ import numpy as np
 from gradio.components import Dropdown, Textbox
 from sklearn.preprocessing import Normalizer
 from keras.models import load_model
+from keras.preprocessing import sequence
+from keras_preprocessing.sequence import pad_sequences
 from gensim.models import KeyedVectors
 from nltk.stem import WordNetLemmatizer
 from nltk.corpus import wordnet as wn
@@ -187,14 +189,18 @@ def predictor(model, text):
         pred = glove_model.predict(emddng, verbose=1)
         response = 'Hate Speech' if pred > 0.5 else 'Not Hate Speech'
     elif model == "RNN":
-        response = "Modelo no disponible"
-    elif model == "Transformers":
-        response = "Modelo no disponible"
+        word_token = pickle.load(open('salida/word_token.vector', 'rb'))
+        rnn_model = load_model('salida/RNN_model')
+        serie_text = pd.Series([preprocessing(text)])
+        sequences = word_token.texts_to_sequences(serie_text)
+        sequences_matrix = pad_sequences(sequences,maxlen=150)
+        pred = rnn_model.predict(sequences_matrix)
+        response = 'Hate Speech' if pred[0][0] > 0.25 else 'Not Hate Speech'
     else:
         response = "Modelo no disponible"
     return response
 
-input1 = Dropdown(["Naive Bayes", "Logistic Regression", "Lexicon", "Random Forest", "Trained Embedding", "Glove Embedding", "RNN", "Transformers"], label="Model")
+input1 = Dropdown(["Naive Bayes", "Logistic Regression", "Lexicon", "Random Forest", "Trained Embedding", "Glove Embedding", "RNN"], label="Model")
 input2 = Textbox(placeholder="Enter Phrase", label="Phrase")
 output = Textbox(label="Result")
 
