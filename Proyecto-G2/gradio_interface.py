@@ -154,55 +154,66 @@ def glove_sentence_to_embedding(sentence: str, embedding: bin) -> np.array:
     return vector
 
 
-def predictor(model, text):
-    if model == "Naive Bayes":
-        count_vector = pickle.load(open('salida/naive_bayes.vector', 'rb'))
-        naive_bayes = pickle.load(open('salida/naive_bayes.model', 'rb'))
-        data = count_vector.transform([text])
-        norm = Normalizer().fit_transform(data)
-        response = 'Hate Speech' if naive_bayes.predict(norm)[0] == 1 else 'Not Hate Speech'
-    elif model == "Logistic Regression":
-        count_vector = pickle.load(open('salida/logistic_regression.vector', 'rb'))
-        logistic_regression = pickle.load(open('salida/logistic_regression.model', 'rb'))
-        data = count_vector.transform([text])
-        norm = Normalizer().fit_transform(data)
-        response = 'Hate Speech' if logistic_regression.predict(norm)[0] == 1 else 'Not Hate Speech'
-    elif model == "Lexicon":
-        naive_bayes = pickle.load(open('salida/swn_lexicon_naive_bayes.model', 'rb'))
-        data = lexicon_sentiwordnet(text) if text else [0,0,0,0,0,0,0,0,0,0,0,0,0]
-        response = 'Hate Speech' if naive_bayes.predict([data])[0] == 1 and text != '' else 'Not Hate Speech'
-    elif model == "Random Forest":
-        count_vector = pickle.load(open('salida/random_forest.vector', 'rb'))
-        random_forest = pickle.load(open('salida/random_forest.model', 'rb'))
-        data = count_vector.transform([text])
-        norm = Normalizer().fit_transform(data)
-        response = 'Hate Speech' if random_forest.predict(norm)[0] == 1 else 'Not Hate Speech'
-    elif model == "Trained Embedding":
-        embedding = gensim.models.Word2Vec.load('salida/embedding.model')
-        model = load_model('salida/embedding_model')
-        data = np.asarray([sentence_to_embedding(text, embedding).tolist()]).astype('float32')
-        pred = model.predict(data, verbose=1)
-        response = 'Hate Speech' if pred > 0.5 else 'Not Hate Speech'
-    elif model == "Glove Embedding":
-        glove_model = load_model('salida/embedding_glove')
-        emddng = np.asarray([glove_sentence_to_embedding(text, glove_embedding).tolist()]).astype('float32')
-        pred = glove_model.predict(emddng, verbose=1)
-        response = 'Hate Speech' if pred > 0.5 else 'Not Hate Speech'
-    elif model == "RNN":
-        word_token = pickle.load(open('salida/word_token.vector', 'rb'))
-        rnn_model = load_model('salida/RNN_model')
-        serie_text = pd.Series([preprocessing(text)])
-        sequences = word_token.texts_to_sequences(serie_text)
-        sequences_matrix = pad_sequences(sequences,maxlen=150)
-        pred = rnn_model.predict(sequences_matrix)
-        response = 'Hate Speech' if pred[0][0] > 0.25 else 'Not Hate Speech'
-    else:
-        response = "Modelo no disponible"
-    return response
+def predictor(text):
+    # "Naive Bayes"
+    count_vector = pickle.load(open('salida/naive_bayes.vector', 'rb'))
+    naive_bayes = pickle.load(open('salida/naive_bayes.model', 'rb'))
+    data = count_vector.transform([text])
+    norm = Normalizer().fit_transform(data)
+    response1 = 'Hate Speech' if naive_bayes.predict(norm)[0] == 1 else 'Not Hate Speech'
+    # "Logistic Regression"
+    count_vector = pickle.load(open('salida/logistic_regression.vector', 'rb'))
+    logistic_regression = pickle.load(open('salida/logistic_regression.model', 'rb'))
+    data = count_vector.transform([text])
+    norm = Normalizer().fit_transform(data)
+    response2 = 'Hate Speech' if logistic_regression.predict(norm)[0] == 1 else 'Not Hate Speech'
+    # "Lexicon"
+    naive_bayes = pickle.load(open('salida/swn_lexicon_naive_bayes.model', 'rb'))
+    data = lexicon_sentiwordnet(text) if text else [0,0,0,0,0,0,0,0,0,0,0,0,0]
+    response3 = 'Hate Speech' if naive_bayes.predict([data])[0] == 1 and text != '' else 'Not Hate Speech'
+    # "Random Forest"
+    count_vector = pickle.load(open('salida/random_forest.vector', 'rb'))
+    random_forest = pickle.load(open('salida/random_forest.model', 'rb'))
+    data = count_vector.transform([text])
+    norm = Normalizer().fit_transform(data)
+    response4 = 'Hate Speech' if random_forest.predict(norm)[0] == 1 else 'Not Hate Speech'
+    # "Trained Embedding"
+    embedding = gensim.models.Word2Vec.load('salida/embedding.model')
+    model = load_model('salida/embedding_model')
+    data = np.asarray([sentence_to_embedding(text, embedding).tolist()]).astype('float32')
+    pred = model.predict(data, verbose=1)
+    response5 = 'Hate Speech' if pred > 0.5 else 'Not Hate Speech'
+    # "Glove Embedding"
+    glove_model = load_model('salida/embedding_glove')
+    emddng = np.asarray([glove_sentence_to_embedding(text, glove_embedding).tolist()]).astype('float32')
+    pred = glove_model.predict(emddng, verbose=1)
+    response6 = 'Hate Speech' if pred > 0.5 else 'Not Hate Speech'
+    # "RNN"
+    word_token = pickle.load(open('salida/word_token.vector', 'rb'))
+    rnn_model = load_model('salida/RNN_model')
+    serie_text = pd.Series([preprocessing(text)])
+    sequences = word_token.texts_to_sequences(serie_text)
+    sequences_matrix = pad_sequences(sequences,maxlen=150)
+    pred = rnn_model.predict(sequences_matrix)
+    response7 = 'Hate Speech' if pred[0][0] > 0.25 else 'Not Hate Speech'
+    return [response1, response2, response3, response4, response5, response6, response7]
 
-input1 = Dropdown(["Naive Bayes", "Logistic Regression", "Lexicon", "Random Forest", "Trained Embedding", "Glove Embedding", "RNN"], label="Model")
-input2 = Textbox(placeholder="Enter Phrase", label="Phrase")
-output = Textbox(label="Result")
+# input1 = Dropdown(["Naive Bayes", "Logistic Regression", "Lexicon", "Random Forest", "Trained Embedding", "Glove Embedding", "RNN"], label="Model")
+input = Textbox(placeholder="Enter Phrase", label="Phrase")
+output1 = Textbox(label="Naive Bayes")
+output2 = Textbox(label="Logistic Regression")
+output3 = Textbox(label="Lexicon")
+output4 = Textbox(label="Random Forest")
+output5 = Textbox(label="Trained Embedding")
+output6 = Textbox(label="Glove Embedding")
+output7 = Textbox(label="RNN")
 
-iface = gr.Interface(fn=predictor, inputs=[input1, input2], outputs=[output], live=False,)
+iface = gr.Interface(
+    fn=predictor, 
+    inputs=[input], 
+    outputs=[output1, output2, output3, output4, output5, output6, output7], 
+    live=False, 
+    title="Hate Speech Detector",
+    description="Hate Speech Detector using Machine Learning & Natural Language Processing techniques"
+)
 iface.launch()
